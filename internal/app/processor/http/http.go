@@ -29,7 +29,7 @@ func NewHTTP(hHealth rhandler.Health, cfg section.ProcessorWebServer) *httpProc 
 
 	for _, routeInfo := range router.Routes() {
 		if routeInfo.Path == "" || routeInfo.Method == "" {
-			return nil
+			continue
 		}
 
 		log.Printf("Registered http route: %s %s", routeInfo.Method, routeInfo.Path)
