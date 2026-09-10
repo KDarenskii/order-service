@@ -5,11 +5,13 @@ import (
 	"strings"
 )
 
-var routesToSkip = []string{"health", "debug", "metric"}
+var routesToSkip = []string{"/health", "/debug", "/metrics"}
 
 func IsFilteredHttpRoute(r *http.Request) bool {
-	for _, route := range routesToSkip {
-		if strings.Contains(r.RequestURI, route) {
+	path := r.URL.Path
+
+	for _, prefix := range routesToSkip {
+		if path == prefix || strings.HasPrefix(path, prefix+"/") {
 			return true
 		}
 	}

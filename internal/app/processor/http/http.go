@@ -49,6 +49,7 @@ func NewHTTP(hHealth rhandler.Health, cfg section.ProcessorWebServer) processor.
 
 	p := httpProc{addr: fmt.Sprintf(":%d", cfg.ListenPort)}
 	p.server.Handler = router
+	p.server.ReadHeaderTimeout = cfg.ReadHeaderTimeout
 
 	return &p
 }
@@ -65,9 +66,7 @@ func (p *httpProc) StartAsync(ctx context.Context, wg *sync.WaitGroup) {
 
 	go p.serve(l)
 
-	processor.WatchForShutdown(ctx, wg, processor.CloserFunc(l.Close))
-
-	processor.WatchForShutdown(ctx, wg, processor.NewCloserContextFunc(p.server.Shutdown, ctx, 5*time.Second))
+	processor.WatchForShutdown(ctx, wg, processor.NewCloserContextFunc(p.server.Shutdown, context.Background(), 5*time.Second))
 }
 
 func (p *httpProc) serve(l net.Listener) {
