@@ -1,27 +1,39 @@
 package rprocessor
 
 import (
+	"context"
 	"fmt"
-	"log"
+	"net"
 	"net/http"
+	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/rs/zerolog/log"
 
 	"github.com/KDarenskii/order-service/internal/app/config/section"
 	rhandler "github.com/KDarenskii/order-service/internal/app/handler/http"
+	"github.com/KDarenskii/order-service/internal/app/processor"
+	"github.com/KDarenskii/order-service/internal/pkg/http/httph"
+	"github.com/KDarenskii/order-service/internal/pkg/http/mzerolog"
+	"github.com/KDarenskii/order-service/internal/util"
 )
 
 type httpProc struct {
-	server *http.Server
+	server http.Server
 	addr   string
 }
 
-func NewHTTP(hHealth rhandler.Health, cfg section.ProcessorWebServer) *httpProc {
+func NewHTTP(hHealth rhandler.Health, cfg section.ProcessorWebServer) processor.Processor {
 	gin.SetMode(gin.ReleaseMode)
 
 	router := gin.New()
 
-	router.Use(gin.Recovery())
+	router.Use(
+		adaptRequestMiddleware(httph.NewErrorMiddleware()),
+		mzerolog.NewMiddleware(mzerolog.WithSkipper(util.IsFilteredHttpRoute)),
+		gin.Recovery(),
+	)
 
 	router.NoRoute(handleNotFound)
 
@@ -32,21 +44,50 @@ func NewHTTP(hHealth rhandler.Health, cfg section.ProcessorWebServer) *httpProc 
 			continue
 		}
 
-		log.Printf("Registered http route: %s %s", routeInfo.Method, routeInfo.Path)
+		log.Info().Str("method", routeInfo.Method).Str("path", routeInfo.Path).Msg("Registered http route")
 	}
 
-	addr := fmt.Sprintf(":%d", cfg.ListenPort)
+	p := httpProc{addr: fmt.Sprintf(":%d", cfg.ListenPort)}
+	p.server.Handler = router
 
-	server := &http.Server{
-		Addr:              addr,
-		Handler:           router,
-		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
-	}
-
-	return &httpProc{server: server, addr: addr}
+	return &p
 }
 
-func (p *httpProc) Serve() error {
-	log.Printf("Starting HTTP server on %s", p.addr)
-	return p.server.ListenAndServe()
+func (p *httpProc) StartAsync(ctx context.Context, wg *sync.WaitGroup) {
+	var lc net.ListenConfig
+
+	l, err := lc.Listen(ctx, "tcp", p.addr)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to start http server")
+	}
+
+	log.Info().Str("address", p.addr).Str("network", "TCP").Msg("Started http server")
+
+	go p.serve(l)
+
+	processor.WatchForShutdown(ctx, wg, processor.CloserFunc(l.Close))
+
+	processor.WatchForShutdown(ctx, wg, processor.NewCloserContextFunc(p.server.Shutdown, ctx, 5*time.Second))
+}
+
+func (p *httpProc) serve(l net.Listener) {
+	_ = p.server.Serve(l)
+}
+
+func adaptRequestMiddleware(m httph.Middleware) gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		var called bool
+
+		next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			called = true
+			ctx.Request = r
+			ctx.Next()
+		})
+
+		m(next).ServeHTTP(ctx.Writer, ctx.Request)
+
+		if !called {
+			ctx.Abort()
+		}
+	}
 }
