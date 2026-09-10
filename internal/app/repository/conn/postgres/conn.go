@@ -3,10 +3,10 @@ package rcpostgres
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/url"
 	"time"
 
+	"github.com/rs/zerolog/log"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -50,7 +50,7 @@ func NewClient(ctx context.Context, cfg section.RepositoryPostgres) (*Client, er
 
 	dsn := u.String()
 
-	log.Printf("Initializing PostgreSQL connection: add=%s", cfg.Address)
+	log.Info().Str("address", cfg.Address).Msg("Initializing PostgreSQL connection")
 
 	gormDB, err := gorm.Open(postgres.Open(dsn), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	if err != nil {
@@ -74,7 +74,25 @@ func NewClient(ctx context.Context, cfg section.RepositoryPostgres) (*Client, er
 		return nil, fmt.Errorf("ping postgres: %w", err)
 	}
 
-	log.Println("PostgreSQL connection established")
+	log.Info().Msg("PostgreSQL connection established")
 
 	return &Client{db: gormDB, cfg: cfg}, nil
+}
+
+func (c *Client) GetDB(ctx context.Context) *gorm.DB {
+	if tx := getTxFromContext(ctx); tx != nil {
+		return tx
+	}
+
+	return c.db
+}
+
+func (c *Client) InsideTx(ctx context.Context, fn func(ctx context.Context) error) error {
+	if tx := getTxFromContext(ctx); tx != nil {
+		return fn(ctx)
+	}
+
+	return c.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		return fn(setTxToContext(ctx, tx))
+	})
 }
