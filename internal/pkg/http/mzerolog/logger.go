@@ -22,8 +22,9 @@ type middleware struct {
 
 func (m *middleware) Callback(c *gin.Context) {
 	const (
-		tailSuccess = " finished with no error"
-		tailFail    = " finished (or aborted) with error"
+		tailSuccess    = " finished with no error"
+		tailClientFail = " finished with client error"
+		tailServerFail = " finished (or aborted) with server error"
 	)
 
 	startTime := time.Now()
@@ -38,6 +39,8 @@ func (m *middleware) Callback(c *gin.Context) {
 		return
 	}
 
+	status := c.Writer.Status()
+
 	var mb strings.Builder
 	mb.Grow(48 + len(c.Request.RequestURI))
 	mb.WriteString(c.Request.Method)
@@ -45,16 +48,21 @@ func (m *middleware) Callback(c *gin.Context) {
 	mb.WriteString(c.Request.RequestURI)
 
 	var ev *zerolog.Event
-	if err == nil {
+	switch {
+	case status >= http.StatusInternalServerError:
+		mb.WriteString(tailServerFail)
+		ev = m.log.Error()
+	case status >= http.StatusBadRequest:
+		mb.WriteString(tailClientFail)
+		ev = m.log.Warn()
+	default:
 		mb.WriteString(tailSuccess)
 		ev = m.log.Debug()
-	} else {
-		mb.WriteString(tailFail)
-		ev = m.log.Error()
 	}
 
 	ev.Err(err)
 	ev.Ctx(c.Request.Context())
+	ev.Int("status", status)
 	ev.Str("exec_time", execTime.String())
 	ev.Str("client_ip", c.ClientIP())
 	ev.Msg(mb.String())
