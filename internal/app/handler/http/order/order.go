@@ -38,6 +38,7 @@ func (h *handler) Create(c *gin.Context) {
 
 	response := entity.ResponseOrderCreate{
 		GUID:       order.GUID,
+		UserGUID:   order.UserGUID,
 		TotalPrice: order.TotalPrice,
 		Currency:   order.Currency,
 		Status:     order.Status,
@@ -68,11 +69,14 @@ func (h *handler) Update(c *gin.Context) {
 		return
 	}
 
+	orderItemsResponse := mapOrderItemsToResponseOrderItems(order.Items)
+
 	response := entity.ResponseOrderUpdate{
 		GUID:      order.GUID,
 		Status:    order.Status,
 		CreatedAt: order.CreatedAt,
 		UpdatedAt: order.UpdatedAt,
+		Items:     orderItemsResponse,
 	}
 
 	httph.SendJSON(c.Writer, http.StatusOK, response)

@@ -9,11 +9,10 @@ import (
 type OrderStatus string
 
 const (
-	OrderStatusPending   OrderStatus = "pending"
-	OrderStatusPaid      OrderStatus = "paid"
-	OrderStatusShipped   OrderStatus = "shipped"
-	OrderStatusDelivered OrderStatus = "delivered"
-	OrderStatusCancelled OrderStatus = "cancelled"
+	OrderStatusPending            OrderStatus = "pending"
+	OrderStatusPaid               OrderStatus = "paid"
+	OrderStatusConfirmed          OrderStatus = "confirmed"
+	OrderStatusDeliveryCalculated OrderStatus = "delivered_calculated"
 )
 
 const (
@@ -66,11 +65,11 @@ type RequestOrderItemCreate struct {
 }
 
 type RequestOrderUpdate struct {
-	Status OrderStatus `json:"status" binding:"required,oneof=pending paid shipped delivered cancelled"`
+	Status OrderStatus `json:"status" binding:"required,oneof=pending paid confirmed delivery_calculated"`
 }
 
 type RequestOrderList struct {
-	Status   *OrderStatus `json:"status" binding:"omitempty,oneof=pending paid shipped delivered cancelled"`
+	Status   *OrderStatus `json:"status" binding:"omitempty,oneof=pending paid confirmed delivery_calculated"`
 	UserGUID *uuid.UUID   `json:"user_guid" binding:"omitempty"`
 }
 
@@ -83,6 +82,7 @@ type ResponseOrderItem struct {
 
 type ResponseOrderCreate struct {
 	GUID       uuid.UUID   `json:"guid"`
+	UserGUID   *uuid.UUID  `json:"user_guid"`
 	TotalPrice int64       `json:"total_price"`
 	Currency   string      `json:"currency"`
 	Status     OrderStatus `json:"status"`
@@ -108,6 +108,8 @@ type ResponseOrderUpdate struct {
 	Status    OrderStatus `json:"status"`
 	CreatedAt time.Time   `json:"created_at"`
 	UpdatedAt time.Time   `json:"updated_at"`
+
+	Items []ResponseOrderItem `json:"items"`
 }
 
 type ResponseOrderListItem struct {
