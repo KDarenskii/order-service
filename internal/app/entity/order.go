@@ -12,7 +12,7 @@ const (
 	OrderStatusPending            OrderStatus = "pending"
 	OrderStatusPaid               OrderStatus = "paid"
 	OrderStatusConfirmed          OrderStatus = "confirmed"
-	OrderStatusDeliveryCalculated OrderStatus = "delivered_calculated"
+	OrderStatusDeliveryCalculated OrderStatus = "delivery_calculated"
 )
 
 const (
