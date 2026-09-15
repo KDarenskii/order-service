@@ -18,4 +18,5 @@ var (
 	ErrNotFound            = NewAppError(http.StatusNotFound, "not found")
 	ErrAlreadyExists       = NewAppError(http.StatusConflict, "already exists")
 	ErrIncorrectParameters = NewAppError(http.StatusBadRequest, "incorrect parameters")
+	ErrInternal            = NewAppError(http.StatusInternalServerError, "internal error")
 )

@@ -6,20 +6,58 @@ import (
 
 	"github.com/gofrs/uuid"
 
+	ccatalog "github.com/KDarenskii/order-service/internal/app/client/catalog"
 	"github.com/KDarenskii/order-service/internal/app/entity"
 	"github.com/KDarenskii/order-service/internal/app/repository"
 	"github.com/KDarenskii/order-service/internal/app/service"
+	catalogv1 "github.com/KDarenskii/order-service/internal/pkg/grpc/gen/catalog/v1"
 )
 
 type srv struct {
-	repoOrder repository.Order
+	repoOrder   repository.Order
+	catalogGrpc ccatalog.Client
 }
 
-func NewService(repoOrder repository.Order) service.Order {
-	return &srv{repoOrder: repoOrder}
+func NewService(repoOrder repository.Order,
+	catalogGrpc ccatalog.Client,
+) service.Order {
+	return &srv{repoOrder: repoOrder, catalogGrpc: catalogGrpc}
 }
 
 func (s *srv) Create(ctx context.Context, req entity.RequestOrderCreate) (entity.Order, error) {
+	productsGuids := make([]string, 0, len(req.Items))
+
+	seen := make(map[uuid.UUID]struct{}, len(req.Items))
+
+	for _, orderItem := range req.Items {
+		if _, ok := seen[orderItem.ProductGUID]; ok {
+			continue
+		}
+
+		seen[orderItem.ProductGUID] = struct{}{}
+		productsGuids = append(productsGuids, orderItem.ProductGUID.String())
+	}
+
+	productsResp, err := s.catalogGrpc.GetProducts(ctx, &catalogv1.GetProductsRequest{Guids: productsGuids})
+	if err != nil {
+		return entity.Order{}, err
+	}
+
+	if len(productsResp.GetMissingGuids()) != 0 {
+		return entity.Order{}, entity.ErrIncorrectParameters
+	}
+
+	productsPriceMap := make(map[uuid.UUID]int64)
+
+	for _, foundProduct := range productsResp.GetProducts() {
+		guid, err := uuid.FromString(foundProduct.Guid)
+		if err != nil {
+			return entity.Order{}, entity.ErrIncorrectParameters
+		}
+
+		productsPriceMap[guid] = foundProduct.Price
+	}
+
 	now := time.Now()
 
 	orderGUID := uuid.Must(uuid.NewV4())
@@ -29,11 +67,17 @@ func (s *srv) Create(ctx context.Context, req entity.RequestOrderCreate) (entity
 	orderItems := make([]entity.OrderItem, 0, len(req.Items))
 
 	for _, reqOrderItem := range req.Items {
-		totalPrice += reqOrderItem.UnitPrice * int64(reqOrderItem.Quantity)
+		unitPrice, ok := productsPriceMap[reqOrderItem.ProductGUID]
+
+		if !ok {
+			return entity.Order{}, entity.ErrIncorrectParameters
+		}
+
+		totalPrice += unitPrice * int64(reqOrderItem.Quantity)
 
 		newOrderItem := entity.OrderItem{
 			GUID:        uuid.Must(uuid.NewV4()),
-			UnitPrice:   reqOrderItem.UnitPrice,
+			UnitPrice:   unitPrice,
 			Quantity:    reqOrderItem.Quantity,
 			ProductGUID: reqOrderItem.ProductGUID,
 			OrderGUID:   orderGUID,
