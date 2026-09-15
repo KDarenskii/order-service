@@ -24,7 +24,10 @@ type httpProc struct {
 	addr   string
 }
 
-func NewHTTP(hHealth rhandler.Health, cfg section.ProcessorWebServer) processor.Processor {
+func NewHTTP(hHealth rhandler.Health,
+	hOrder rhandler.Order,
+	cfg section.ProcessorWebServer,
+) processor.Processor {
 	gin.SetMode(gin.ReleaseMode)
 
 	router := gin.New()
@@ -38,6 +41,9 @@ func NewHTTP(hHealth rhandler.Health, cfg section.ProcessorWebServer) processor.
 	router.NoRoute(handleNotFound)
 
 	vGenericRegHealthCheck(router, hHealth)
+
+	v1 := router.Group("/v1")
+	v1RegOrderHandler(v1, hOrder)
 
 	for _, routeInfo := range router.Routes() {
 		if routeInfo.Path == "" || routeInfo.Method == "" {

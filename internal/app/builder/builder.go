@@ -15,9 +15,14 @@ import (
 	"github.com/KDarenskii/order-service/internal/app/config"
 	rhandler "github.com/KDarenskii/order-service/internal/app/handler/http"
 	rhealth "github.com/KDarenskii/order-service/internal/app/handler/http/health"
+	horder "github.com/KDarenskii/order-service/internal/app/handler/http/order"
 	"github.com/KDarenskii/order-service/internal/app/processor"
 	rprocessor "github.com/KDarenskii/order-service/internal/app/processor/http"
+	"github.com/KDarenskii/order-service/internal/app/repository"
 	rcpostgres "github.com/KDarenskii/order-service/internal/app/repository/conn/postgres"
+	porder "github.com/KDarenskii/order-service/internal/app/repository/order"
+	"github.com/KDarenskii/order-service/internal/app/service"
+	sorder "github.com/KDarenskii/order-service/internal/app/service/order"
 )
 
 type Builder struct {
@@ -31,7 +36,12 @@ type Builder struct {
 
 	connPostgres *rcpostgres.Client
 
+	orderRepo repository.Order
+
+	orderService service.Order
+
 	healthHandler rhandler.Health
+	orderHandler  rhandler.Order
 
 	processors []processor.Processor
 }
@@ -103,14 +113,44 @@ func (b *Builder) BuildRepoConnPostgres() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+///// REPOSITORIES /////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+func (b *Builder) BuildRepoOrder() {
+	b.exec(func(b *Builder) {
+		b.orderRepo = porder.NewRepo(b.connPostgres)
+	}, b.connPostgres)
+}
+
+////////////////////////////////////////////////////////////////////////////////
+///// SERVICES /////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+func (b *Builder) BuildServiceOrder() {
+	b.exec(func(b *Builder) {
+		b.orderService = sorder.NewService(b.orderRepo)
+	}, b.orderRepo)
+}
+
+////////////////////////////////////////////////////////////////////////////////
 ///// PROCESSORS ///////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 
 func (b *Builder) BuildProcHttp() {
 	b.exec(func(b *Builder) {
-		proc := rprocessor.NewHTTP(b.healthHandler, b.cfg.Processor.WebServer)
+		proc := rprocessor.NewHTTP(b.healthHandler, b.orderHandler, b.cfg.Processor.WebServer)
 		b.processors = append(b.processors, proc)
-	}, b.healthHandler)
+	}, b.healthHandler, b.orderHandler)
+}
+
+////////////////////////////////////////////////////////////////////////////////
+///// HANDLERS /////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+func (b *Builder) BuildHandlerOrder() {
+	b.exec(func(b *Builder) {
+		b.orderHandler = horder.NewHandler(b.orderService)
+	}, b.orderService)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
