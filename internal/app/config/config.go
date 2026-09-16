@@ -16,6 +16,7 @@ type Config struct {
 	Repository section.Repository
 	Processor  section.Processor
 	Monitor    section.Monitor
+	Client     section.Client
 }
 
 var Root Config

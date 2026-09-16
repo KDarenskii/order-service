@@ -11,7 +11,10 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"github.com/urfave/cli/v2"
+	"google.golang.org/grpc"
 
+	ccatalog "github.com/KDarenskii/order-service/internal/app/client/catalog"
+	cgrpc "github.com/KDarenskii/order-service/internal/app/client/catalog/grpc"
 	"github.com/KDarenskii/order-service/internal/app/config"
 	rhandler "github.com/KDarenskii/order-service/internal/app/handler/http"
 	rhealth "github.com/KDarenskii/order-service/internal/app/handler/http/health"
@@ -34,7 +37,10 @@ type Builder struct {
 
 	chErrors chan error
 
-	connPostgres *rcpostgres.Client
+	connPostgres    *rcpostgres.Client
+	catalogGrpcConn *grpc.ClientConn
+
+	catalogV1Client ccatalog.Client
 
 	orderRepo repository.Order
 
@@ -123,13 +129,48 @@ func (b *Builder) BuildRepoOrder() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+///// CLIENTS /////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+func (b *Builder) BuildClientGrpcCatalogV1() {
+	b.exec(func(b *Builder) {
+		client, conn, err := cgrpc.NewClient(b.cfg.Client.Catalog.GrpcAddress)
+		if err != nil {
+			b.err = err
+			return
+		}
+
+		if err := client.Ping(b.ctx); err != nil {
+			_ = conn.Close()
+			b.err = err
+			return
+		}
+
+		processor.WatchForShutdown(b.ctx, &b.wg, processor.CloserFunc(conn.Close))
+
+		b.catalogGrpcConn = conn
+		b.catalogV1Client = client
+	})
+}
+
+////////////////////////////////////////////////////////////////////////////////
 ///// SERVICES /////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 
 func (b *Builder) BuildServiceOrder() {
 	b.exec(func(b *Builder) {
-		b.orderService = sorder.NewService(b.orderRepo)
-	}, b.orderRepo)
+		b.orderService = sorder.NewService(b.orderRepo, b.catalogV1Client)
+	}, b.orderRepo, b.catalogV1Client)
+}
+
+////////////////////////////////////////////////////////////////////////////////
+///// HANDLERS /////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+func (b *Builder) BuildHandlerOrder() {
+	b.exec(func(b *Builder) {
+		b.orderHandler = horder.NewHandler(b.orderService)
+	}, b.orderService)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -141,16 +182,6 @@ func (b *Builder) BuildProcHttp() {
 		proc := rprocessor.NewHTTP(b.healthHandler, b.orderHandler, b.cfg.Processor.WebServer)
 		b.processors = append(b.processors, proc)
 	}, b.healthHandler, b.orderHandler)
-}
-
-////////////////////////////////////////////////////////////////////////////////
-///// HANDLERS /////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////
-
-func (b *Builder) BuildHandlerOrder() {
-	b.exec(func(b *Builder) {
-		b.orderHandler = horder.NewHandler(b.orderService)
-	}, b.orderService)
 }
 
 ////////////////////////////////////////////////////////////////////////////////

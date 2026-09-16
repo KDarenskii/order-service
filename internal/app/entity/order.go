@@ -61,7 +61,6 @@ type RequestOrderCreate struct {
 type RequestOrderItemCreate struct {
 	ProductGUID uuid.UUID `json:"product_guid" binding:"required"`
 	Quantity    int       `json:"quantity"     binding:"required,gt=0,lte=1000"`
-	UnitPrice   int64     `json:"unit_price"   binding:"required,gt=0,lte=100000000"`
 }
 
 type RequestOrderUpdate struct {
