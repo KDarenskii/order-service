@@ -3,6 +3,8 @@ module github.com/KDarenskii/order-service
 go 1.25.0
 
 require (
+	github.com/getsentry/sentry-go v0.46.2
+	github.com/getsentry/sentry-go/zerolog v0.46.2
 	github.com/gin-gonic/gin v1.12.0
 	github.com/gofrs/uuid v4.4.0+incompatible
 	github.com/joho/godotenv v1.5.1
@@ -19,6 +21,7 @@ require (
 
 require (
 	github.com/beorn7/perks v1.0.1 // indirect
+	github.com/buger/jsonparser v1.1.2 // indirect
 	github.com/bytedance/gopkg v0.1.3 // indirect
 	github.com/bytedance/sonic v1.15.0 // indirect
 	github.com/bytedance/sonic/loader v0.5.0 // indirect
