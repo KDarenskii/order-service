@@ -16,11 +16,13 @@ import (
 	ccatalog "github.com/KDarenskii/order-service/internal/app/client/catalog"
 	cgrpc "github.com/KDarenskii/order-service/internal/app/client/catalog/grpc"
 	"github.com/KDarenskii/order-service/internal/app/config"
+	"github.com/KDarenskii/order-service/internal/app/constant"
 	rhandler "github.com/KDarenskii/order-service/internal/app/handler/http"
 	rhealth "github.com/KDarenskii/order-service/internal/app/handler/http/health"
 	horder "github.com/KDarenskii/order-service/internal/app/handler/http/order"
 	"github.com/KDarenskii/order-service/internal/app/processor"
 	rprocessor "github.com/KDarenskii/order-service/internal/app/processor/http"
+	pmonitor "github.com/KDarenskii/order-service/internal/app/processor/monitor"
 	"github.com/KDarenskii/order-service/internal/app/repository"
 	rcpostgres "github.com/KDarenskii/order-service/internal/app/repository/conn/postgres"
 	porder "github.com/KDarenskii/order-service/internal/app/repository/order"
@@ -50,6 +52,8 @@ type Builder struct {
 	orderHandler  rhandler.Order
 
 	processors []processor.Processor
+
+	otelServiceName string
 }
 
 func NewBuilder(cCtx *cli.Context) *Builder {
@@ -76,9 +80,11 @@ func NewBuilder(cCtx *cli.Context) *Builder {
 }
 
 func (b *Builder) BuildConfig() {
-	b.exec(func(b *Builder) {
-		b.buildConfig()
-	})
+	b.exec(
+		func(b *Builder) {
+			b.buildConfig()
+		},
+	)
 }
 
 func (b *Builder) Run() {
@@ -107,15 +113,17 @@ func (b *Builder) Run() {
 ////////////////////////////////////////////////////////////////////////////////
 
 func (b *Builder) BuildRepoConnPostgres() {
-	b.exec(func(b *Builder) {
-		pgClient, err := rcpostgres.NewClient(b.ctx, b.cfg.Repository.Postgres)
-		if err != nil {
-			b.err = err
-			return
-		}
+	b.exec(
+		func(b *Builder) {
+			pgClient, err := rcpostgres.NewClient(b.ctx, b.cfg.Repository.Postgres)
+			if err != nil {
+				b.err = err
+				return
+			}
 
-		b.connPostgres = pgClient
-	})
+			b.connPostgres = pgClient
+		},
+	)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -123,9 +131,11 @@ func (b *Builder) BuildRepoConnPostgres() {
 ////////////////////////////////////////////////////////////////////////////////
 
 func (b *Builder) BuildRepoOrder() {
-	b.exec(func(b *Builder) {
-		b.orderRepo = porder.NewRepo(b.connPostgres)
-	}, b.connPostgres)
+	b.exec(
+		func(b *Builder) {
+			b.orderRepo = porder.NewRepo(b.connPostgres)
+		}, b.connPostgres,
+	)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -133,24 +143,26 @@ func (b *Builder) BuildRepoOrder() {
 ////////////////////////////////////////////////////////////////////////////////
 
 func (b *Builder) BuildClientGrpcCatalogV1() {
-	b.exec(func(b *Builder) {
-		client, conn, err := cgrpc.NewClient(b.cfg.Client.Catalog.GrpcAddress)
-		if err != nil {
-			b.err = err
-			return
-		}
+	b.exec(
+		func(b *Builder) {
+			client, conn, err := cgrpc.NewClient(b.cfg.Client.Catalog.GrpcAddress)
+			if err != nil {
+				b.err = err
+				return
+			}
 
-		if err := client.Ping(b.ctx); err != nil {
-			_ = conn.Close()
-			b.err = err
-			return
-		}
+			if err := client.Ping(b.ctx); err != nil {
+				_ = conn.Close()
+				b.err = err
+				return
+			}
 
-		processor.WatchForShutdown(b.ctx, &b.wg, processor.CloserFunc(conn.Close))
+			processor.WatchForShutdown(b.ctx, &b.wg, processor.CloserFunc(conn.Close))
 
-		b.catalogGrpcConn = conn
-		b.catalogV1Client = client
-	})
+			b.catalogGrpcConn = conn
+			b.catalogV1Client = client
+		},
+	)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -158,9 +170,11 @@ func (b *Builder) BuildClientGrpcCatalogV1() {
 ////////////////////////////////////////////////////////////////////////////////
 
 func (b *Builder) BuildServiceOrder() {
-	b.exec(func(b *Builder) {
-		b.orderService = sorder.NewService(b.orderRepo, b.catalogV1Client)
-	}, b.orderRepo, b.catalogV1Client)
+	b.exec(
+		func(b *Builder) {
+			b.orderService = sorder.NewService(b.orderRepo, b.catalogV1Client)
+		}, b.orderRepo, b.catalogV1Client,
+	)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -168,9 +182,11 @@ func (b *Builder) BuildServiceOrder() {
 ////////////////////////////////////////////////////////////////////////////////
 
 func (b *Builder) BuildHandlerOrder() {
-	b.exec(func(b *Builder) {
-		b.orderHandler = horder.NewHandler(b.orderService)
-	}, b.orderService)
+	b.exec(
+		func(b *Builder) {
+			b.orderHandler = horder.NewHandler(b.orderService)
+		}, b.orderService,
+	)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -178,10 +194,39 @@ func (b *Builder) BuildHandlerOrder() {
 ////////////////////////////////////////////////////////////////////////////////
 
 func (b *Builder) BuildProcHttp() {
-	b.exec(func(b *Builder) {
-		proc := rprocessor.NewHTTP(b.healthHandler, b.orderHandler, b.cfg.Processor.WebServer)
-		b.processors = append(b.processors, proc)
-	}, b.healthHandler, b.orderHandler)
+	b.exec(
+		func(b *Builder) {
+			proc := rprocessor.NewHTTP(b.otelServiceName, b.healthHandler, b.orderHandler, b.cfg.Processor.WebServer)
+			b.processors = append(b.processors, proc)
+		}, b.healthHandler, b.orderHandler,
+	)
+}
+
+////////////////////////////////////////////////////////////////////////////////
+///// MONITOR ///////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+func (b *Builder) BuildMonitorOpenTelemetry() {
+	cfg := b.cfg.Monitor.OpenTelemetry
+
+	if !cfg.Enabled {
+		log.Warn().Msg("OpenTelemetry is disabled by config")
+		return
+	}
+
+	b.exec(
+		func(b *Builder) {
+			proc, err := pmonitor.NewOpenTelemetryController(b.ctx, b.cfg.Monitor.Environment, cfg)
+			if err != nil {
+				b.err = fmt.Errorf("init OpenTelemetry: %w", err)
+				return
+			}
+
+			b.processors = append(b.processors, proc)
+
+			b.otelServiceName = constant.AppName
+		},
+	)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -189,10 +234,12 @@ func (b *Builder) BuildProcHttp() {
 ////////////////////////////////////////////////////////////////////////////////
 
 func (b *Builder) buildConfig() {
-	config.Load(config.LoadArgs{
-		Output:          b.cCtx.App.Writer,
-		EnableSimpleLog: b.cCtx.Bool("no-json"),
-	})
+	config.Load(
+		config.LoadArgs{
+			Output:          b.cCtx.App.Writer,
+			EnableSimpleLog: b.cCtx.Bool("no-json"),
+		},
+	)
 
 	b.cfg = config.Root
 }
