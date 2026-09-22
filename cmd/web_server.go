@@ -13,10 +13,12 @@ func WebServer() *cli.Command {
 		Name:    "web-server",
 		Aliases: []string{"ws"},
 		Usage:   "Start HTTP server with all routes",
-		Description: strings.TrimSpace(`
+		Description: strings.TrimSpace(
+			`
 Initializes all dependencies (config, DB, repositories, services, handlers)
 and starts the HTTP server. Graceful shutdown on SIGINT/SIGTERM.
-`),
+`,
+		),
 		Action:          cmdWebServer,
 		HideHelpCommand: true,
 	}
@@ -25,6 +27,7 @@ and starts the HTTP server. Graceful shutdown on SIGINT/SIGTERM.
 func cmdWebServer(cCtx *cli.Context) error {
 	b := builder.NewBuilder(cCtx)
 	b.BuildConfig()
+	b.BuildMonitorOpenTelemetry()
 	b.BuildRepoConnPostgres()
 	b.BuildRepoOrder()
 	b.BuildClientGrpcCatalogV1()

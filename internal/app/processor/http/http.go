@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 
 	"github.com/KDarenskii/order-service/internal/app/config/section"
 	rhandler "github.com/KDarenskii/order-service/internal/app/handler/http"
@@ -24,13 +25,26 @@ type httpProc struct {
 	addr   string
 }
 
-func NewHTTP(hHealth rhandler.Health,
+func NewHTTP(
+	otelServiceName string, hHealth rhandler.Health,
 	hOrder rhandler.Order,
 	cfg section.ProcessorWebServer,
 ) processor.Processor {
 	gin.SetMode(gin.ReleaseMode)
 
 	router := gin.New()
+
+	if otelServiceName != "" {
+		router.Use(
+			otelgin.Middleware(
+				otelServiceName, otelgin.WithFilter(
+					func(r *http.Request) bool {
+						return !util.IsFilteredHttpRoute(r)
+					},
+				),
+			),
+		)
+	}
 
 	router.Use(
 		adaptRequestMiddleware(httph.NewErrorMiddleware()),
@@ -72,7 +86,9 @@ func (p *httpProc) StartAsync(ctx context.Context, wg *sync.WaitGroup) {
 
 	go p.serve(l)
 
-	processor.WatchForShutdown(ctx, wg, processor.NewCloserContextFunc(p.server.Shutdown, context.Background(), 5*time.Second))
+	processor.WatchForShutdown(
+		ctx, wg, processor.NewCloserContextFunc(p.server.Shutdown, context.Background(), 5*time.Second),
+	)
 }
 
 func (p *httpProc) serve(l net.Listener) {
@@ -83,11 +99,13 @@ func adaptRequestMiddleware(m httph.Middleware) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		var called bool
 
-		next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			called = true
-			ctx.Request = r
-			ctx.Next()
-		})
+		next := http.HandlerFunc(
+			func(w http.ResponseWriter, r *http.Request) {
+				called = true
+				ctx.Request = r
+				ctx.Next()
+			},
+		)
 
 		m(next).ServeHTTP(ctx.Writer, ctx.Request)
 
