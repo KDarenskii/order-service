@@ -12,6 +12,7 @@ import (
 	"github.com/KDarenskii/order-service/internal/app/config/section"
 	"github.com/KDarenskii/order-service/internal/app/constant"
 	msentry "github.com/KDarenskii/order-service/internal/app/monitor/sentry"
+	mtracelog "github.com/KDarenskii/order-service/internal/app/monitor/tracelog"
 )
 
 type Config struct {
@@ -31,6 +32,7 @@ type LoadArgs struct {
 func createLogger(level zerolog.Level, output io.Writer) zerolog.Logger {
 	return zerolog.New(output).
 		Level(level).
+		Hook(mtracelog.Hook{}).
 		With().
 		Timestamp().
 		Logger()
