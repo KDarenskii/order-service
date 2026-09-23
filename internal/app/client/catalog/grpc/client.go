@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/rs/zerolog/log"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -26,7 +27,10 @@ func NewClient(address string) (ccatalog.Client, *grpc.ClientConn, error) {
 		Str("address", address).
 		Msg("Initializing catalog-service gRPC client")
 
-	conn, err := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(
+		address, grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
+	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create catalog-service grpc client: %w", err)
 	}
@@ -47,7 +51,9 @@ func (c *client) Ping(ctx context.Context) error {
 	return nil
 }
 
-func (c *client) GetProduct(ctx context.Context, req *catalogv1.GetProductRequest) (*catalogv1.GetProductResponse, error) {
+func (c *client) GetProduct(ctx context.Context, req *catalogv1.GetProductRequest) (
+	*catalogv1.GetProductResponse, error,
+) {
 	res, err := c.raw.GetProduct(ctx, req)
 	if err != nil {
 		return nil, normalizeError(err)
@@ -56,7 +62,9 @@ func (c *client) GetProduct(ctx context.Context, req *catalogv1.GetProductReques
 	return res, nil
 }
 
-func (c *client) GetProducts(ctx context.Context, req *catalogv1.GetProductsRequest) (*catalogv1.GetProductsResponse, error) {
+func (c *client) GetProducts(ctx context.Context, req *catalogv1.GetProductsRequest) (
+	*catalogv1.GetProductsResponse, error,
+) {
 	res, err := c.raw.GetProducts(ctx, req)
 	if err != nil {
 		return nil, normalizeError(err)
