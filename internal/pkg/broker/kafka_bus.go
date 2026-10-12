@@ -8,9 +8,10 @@ import (
 	"time"
 
 	"github.com/IBM/sarama"
-	"github.com/KDarenskii/order-service/internal/pkg/broker/codec"
 	"github.com/gofrs/uuid"
 	"github.com/rs/zerolog/log"
+
+	"github.com/KDarenskii/order-service/internal/pkg/broker/codec"
 )
 
 var _ Bus[any] = (*kafkaBus[any])(nil)
@@ -62,7 +63,6 @@ func NewBus[T any](client *KafkaClient, c codec.Codec[T], topic, consumerGroup s
 
 func MustKafkaBus[T any](client *KafkaClient, c codec.Codec[T], topic, consumerGroup string) Bus[T] {
 	bus, err := NewBus(client, c, topic, consumerGroup)
-
 	if err != nil {
 		log.Fatal().Err(err).Str("topic", topic).Msg("Failed to create bus")
 	}
@@ -72,7 +72,6 @@ func MustKafkaBus[T any](client *KafkaClient, c codec.Codec[T], topic, consumerG
 
 func (b *kafkaBus[T]) Send(_ context.Context, msg *T, headers ...Header) error {
 	encodedMsg, err := b.codec.Encode(msg)
-
 	if err != nil {
 		return fmt.Errorf("broker: failed to encode message")
 	}
@@ -98,7 +97,6 @@ func (b *kafkaBus[T]) Send(_ context.Context, msg *T, headers ...Header) error {
 	}
 
 	_, _, err = b.client.producer.SendMessage(producerMsg)
-
 	if err != nil {
 		return fmt.Errorf("broker: failed to send message")
 	}
@@ -227,7 +225,6 @@ func (h *consumerGroupHandler[T]) process(
 	ctx context.Context, session sarama.ConsumerGroupSession, msg *sarama.ConsumerMessage,
 ) error {
 	decoded, err := h.codec.Decode(msg.Value)
-
 	if err != nil {
 		log.Error().Err(err).Str("topic", msg.Topic).Msg("failed to decode message")
 		session.MarkMessage(msg, "")

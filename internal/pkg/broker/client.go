@@ -34,13 +34,11 @@ func NewKafkaClient(cfg KafkaConfig) (*KafkaClient, error) {
 	saramaCfg.Consumer.Offsets.Initial = sarama.OffsetNewest
 
 	saramaClient, err := sarama.NewClient(cfg.Addresses, saramaCfg)
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize sarama client: %w", err)
 	}
 
 	producer, err := sarama.NewSyncProducerFromClient(saramaClient)
-
 	if err != nil {
 		_ = saramaClient.Close()
 		return nil, fmt.Errorf("failed to initialize producer: %w", err)
