@@ -205,20 +205,20 @@ func (h *consumerGroupHandler[T]) ConsumeClaim(
 ) error {
 	ctx := session.Context()
 	defer session.Commit()
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case msg, ok := <-claim.Messages():
-		if !ok {
-			return nil
-		}
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case msg, ok := <-claim.Messages():
+			if !ok {
+				return nil
+			}
 
-		if err := h.process(ctx, session, msg); err != nil {
-			return err
+			if err := h.process(ctx, session, msg); err != nil {
+				return err
+			}
 		}
 	}
-
-	return nil
 }
 
 func (h *consumerGroupHandler[T]) process(
