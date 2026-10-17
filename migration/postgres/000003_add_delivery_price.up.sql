@@ -1,0 +1,1 @@
+ALTER TABLE orders ADD COLUMN delivery_price BIGINT NOT NULL DEFAULT 0;

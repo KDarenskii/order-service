@@ -9,6 +9,9 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/KDarenskii/order-service/internal/app/entity"
+	"github.com/KDarenskii/order-service/internal/pkg/broker"
+	"github.com/KDarenskii/order-service/internal/pkg/broker/codec"
 	"github.com/rs/zerolog/log"
 	"github.com/urfave/cli/v2"
 	"google.golang.org/grpc"
@@ -43,6 +46,9 @@ type Builder struct {
 	catalogGrpcConn *grpc.ClientConn
 
 	catalogV1Client ccatalog.Client
+
+	kafkaClient     *broker.KafkaClient
+	busOrderCreated broker.Bus[entity.EventOrderCreated]
 
 	orderRepo repository.Order
 
@@ -165,6 +171,47 @@ func (b *Builder) BuildClientGrpcCatalogV1() {
 	)
 }
 
+// ////////////////////////////////////////////////////////////////////////////////
+// ///// CLIENTS /////////////////////////////////////////////////////////////
+// ///////////////////////////////////////////////////////////////////////////////
+
+func (b *Builder) BuildBrokerKafka() {
+	b.exec(
+		func(b *Builder) {
+			cfg := b.cfg.Broker.Kafka
+
+			client, err := broker.NewKafkaClient(
+				broker.KafkaConfig{
+					Addresses:     cfg.Addresses,
+					ConsumerGroup: cfg.ConsumerGroup,
+					ClientID:      cfg.ClientID,
+				},
+			)
+
+			if err != nil {
+				b.err = fmt.Errorf("kafka client: %w", err)
+				return
+			}
+
+			b.kafkaClient = client
+
+			bus, err := broker.NewBus(
+				client, codec.NewCodecJson[entity.EventOrderCreated](), cfg.ModelOrder.Created.Topic,
+				broker.Coalesce(cfg.ModelOrder.Created.ConsumerGroup, cfg.ConsumerGroup),
+			)
+
+			if err != nil {
+				b.err = fmt.Errorf("kafka bus: %w", err)
+				return
+			}
+
+			b.busOrderCreated = bus
+
+			processor.WatchForShutdown(b.ctx, &b.wg, processor.CloserFunc(client.Close))
+		},
+	)
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 ///// SERVICES /////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
@@ -172,8 +219,8 @@ func (b *Builder) BuildClientGrpcCatalogV1() {
 func (b *Builder) BuildServiceOrder() {
 	b.exec(
 		func(b *Builder) {
-			b.orderService = sorder.NewService(b.orderRepo, b.catalogV1Client)
-		}, b.orderRepo, b.catalogV1Client,
+			b.orderService = sorder.NewService(b.orderRepo, b.catalogV1Client, b.busOrderCreated)
+		}, b.orderRepo, b.catalogV1Client, b.busOrderCreated,
 	)
 }
 

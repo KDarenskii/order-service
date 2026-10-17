@@ -31,6 +31,7 @@ func cmdWebServer(cCtx *cli.Context) error {
 	b.BuildRepoConnPostgres()
 	b.BuildRepoOrder()
 	b.BuildClientGrpcCatalogV1()
+	b.BuildBrokerKafka()
 	b.BuildServiceOrder()
 	b.BuildHandlerOrder()
 	b.BuildProcHttp()
