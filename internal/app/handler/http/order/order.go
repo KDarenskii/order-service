@@ -37,13 +37,14 @@ func (h *handler) Create(c *gin.Context) {
 	orderItemsResponse := mapOrderItemsToResponseOrderItems(order.Items)
 
 	response := entity.ResponseOrderCreate{
-		GUID:       order.GUID,
-		UserGUID:   order.UserGUID,
-		TotalPrice: order.TotalPrice,
-		Currency:   order.Currency,
-		Status:     order.Status,
-		CreatedAt:  order.CreatedAt,
-		Items:      orderItemsResponse,
+		GUID:          order.GUID,
+		UserGUID:      order.UserGUID,
+		TotalPrice:    order.TotalPrice,
+		DeliveryPrice: order.DeliveryPrice,
+		Currency:      order.Currency,
+		Status:        order.Status,
+		CreatedAt:     order.CreatedAt,
+		Items:         orderItemsResponse,
 	}
 
 	httph.SendJSON(c.Writer, http.StatusCreated, response)
@@ -72,11 +73,12 @@ func (h *handler) Update(c *gin.Context) {
 	orderItemsResponse := mapOrderItemsToResponseOrderItems(order.Items)
 
 	response := entity.ResponseOrderUpdate{
-		GUID:      order.GUID,
-		Status:    order.Status,
-		CreatedAt: order.CreatedAt,
-		UpdatedAt: order.UpdatedAt,
-		Items:     orderItemsResponse,
+		GUID:          order.GUID,
+		Status:        order.Status,
+		CreatedAt:     order.CreatedAt,
+		UpdatedAt:     order.UpdatedAt,
+		DeliveryPrice: order.DeliveryPrice,
+		Items:         orderItemsResponse,
 	}
 
 	httph.SendJSON(c.Writer, http.StatusOK, response)
@@ -114,14 +116,15 @@ func (h *handler) GetByGUID(c *gin.Context) {
 	orderItemsResponse := mapOrderItemsToResponseOrderItems(order.Items)
 
 	response := entity.ResponseOrderGet{
-		GUID:       order.GUID,
-		TotalPrice: order.TotalPrice,
-		Currency:   order.Currency,
-		Status:     order.Status,
-		CreatedAt:  order.CreatedAt,
-		UserGUID:   order.UserGUID,
-		UpdatedAt:  order.UpdatedAt,
-		Items:      orderItemsResponse,
+		GUID:          order.GUID,
+		TotalPrice:    order.TotalPrice,
+		DeliveryPrice: order.DeliveryPrice,
+		Currency:      order.Currency,
+		Status:        order.Status,
+		CreatedAt:     order.CreatedAt,
+		UserGUID:      order.UserGUID,
+		UpdatedAt:     order.UpdatedAt,
+		Items:         orderItemsResponse,
 	}
 
 	httph.SendJSON(c.Writer, http.StatusOK, response)
