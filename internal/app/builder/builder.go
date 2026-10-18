@@ -9,9 +9,6 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/KDarenskii/order-service/internal/app/entity"
-	"github.com/KDarenskii/order-service/internal/pkg/broker"
-	"github.com/KDarenskii/order-service/internal/pkg/broker/codec"
 	"github.com/rs/zerolog/log"
 	"github.com/urfave/cli/v2"
 	"google.golang.org/grpc"
@@ -20,6 +17,7 @@ import (
 	cgrpc "github.com/KDarenskii/order-service/internal/app/client/catalog/grpc"
 	"github.com/KDarenskii/order-service/internal/app/config"
 	"github.com/KDarenskii/order-service/internal/app/constant"
+	"github.com/KDarenskii/order-service/internal/app/entity"
 	rhandler "github.com/KDarenskii/order-service/internal/app/handler/http"
 	rhealth "github.com/KDarenskii/order-service/internal/app/handler/http/health"
 	horder "github.com/KDarenskii/order-service/internal/app/handler/http/order"
@@ -31,6 +29,8 @@ import (
 	porder "github.com/KDarenskii/order-service/internal/app/repository/order"
 	"github.com/KDarenskii/order-service/internal/app/service"
 	sorder "github.com/KDarenskii/order-service/internal/app/service/order"
+	"github.com/KDarenskii/order-service/internal/pkg/broker"
+	"github.com/KDarenskii/order-service/internal/pkg/broker/codec"
 )
 
 type Builder struct {
@@ -187,7 +187,6 @@ func (b *Builder) BuildBrokerKafka() {
 					ClientID:      cfg.ClientID,
 				},
 			)
-
 			if err != nil {
 				b.err = fmt.Errorf("kafka client: %w", err)
 				return
@@ -199,7 +198,6 @@ func (b *Builder) BuildBrokerKafka() {
 				client, codec.NewCodecJson[entity.EventOrderCreated](), cfg.ModelOrder.Created.Topic,
 				broker.Coalesce(cfg.ModelOrder.Created.ConsumerGroup, cfg.ConsumerGroup),
 			)
-
 			if err != nil {
 				b.err = fmt.Errorf("kafka bus: %w", err)
 				return

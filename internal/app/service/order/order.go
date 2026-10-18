@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/KDarenskii/order-service/internal/pkg/broker"
 	"github.com/gofrs/uuid"
 	"github.com/rs/zerolog/log"
 
@@ -12,6 +11,7 @@ import (
 	"github.com/KDarenskii/order-service/internal/app/entity"
 	"github.com/KDarenskii/order-service/internal/app/repository"
 	"github.com/KDarenskii/order-service/internal/app/service"
+	"github.com/KDarenskii/order-service/internal/pkg/broker"
 	catalogv1 "github.com/KDarenskii/order-service/internal/pkg/grpc/gen/catalog/v1"
 )
 

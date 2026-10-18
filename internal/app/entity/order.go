@@ -3,9 +3,10 @@ package entity
 import (
 	"time"
 
-	"github.com/KDarenskii/order-service/internal/pkg/broker"
 	"github.com/gofrs/uuid"
 	"github.com/rs/zerolog"
+
+	"github.com/KDarenskii/order-service/internal/pkg/broker"
 )
 
 type OrderStatus string
