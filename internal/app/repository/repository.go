@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"time"
 
 	"github.com/gofrs/uuid"
 
@@ -20,4 +21,5 @@ type Order interface {
 	Update(ctx context.Context, order entity.Order) error
 	Delete(ctx context.Context, guid uuid.UUID) error
 	List(ctx context.Context, status *entity.OrderStatus, userGUID *uuid.UUID) ([]entity.Order, error)
+	UpdateDelivery(ctx context.Context, orderGUID uuid.UUID, price int64, updatedAt time.Time) error
 }

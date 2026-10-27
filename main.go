@@ -18,6 +18,7 @@ func main() {
 		Usage:   "Order management service",
 		Commands: []*cli.Command{
 			cmd.WebServer(),
+			cmd.SubscribeDeliveryCalculated(),
 		},
 		Flags: []cli.Flag{
 			&cli.BoolFlag{

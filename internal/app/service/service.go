@@ -8,10 +8,16 @@ import (
 	"github.com/KDarenskii/order-service/internal/app/entity"
 )
 
-type Order interface {
-	Create(ctx context.Context, req entity.RequestOrderCreate) (entity.Order, error)
-	GetByGUID(ctx context.Context, guid uuid.UUID) (entity.Order, error)
-	Update(ctx context.Context, guid uuid.UUID, req entity.RequestOrderUpdate) (entity.Order, error)
-	Delete(ctx context.Context, guid uuid.UUID) error
-	List(ctx context.Context, req entity.RequestOrderList) ([]entity.Order, error)
-}
+type (
+	Order interface {
+		Create(ctx context.Context, req entity.RequestOrderCreate) (entity.Order, error)
+		GetByGUID(ctx context.Context, guid uuid.UUID) (entity.Order, error)
+		Update(ctx context.Context, guid uuid.UUID, req entity.RequestOrderUpdate) (entity.Order, error)
+		Delete(ctx context.Context, guid uuid.UUID) error
+		List(ctx context.Context, req entity.RequestOrderList) ([]entity.Order, error)
+	}
+
+	OrderDelivery interface {
+		UpdateDelivery(ctx context.Context, guid uuid.UUID, deliveryPrice int64) error
+	}
+)

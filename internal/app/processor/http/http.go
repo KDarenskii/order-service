@@ -25,10 +25,12 @@ type httpProc struct {
 	addr   string
 }
 
+type RoutesRegistrar func(r *gin.Engine)
+
 func NewHTTP(
 	otelServiceName string, hHealth rhandler.Health,
-	hOrder rhandler.Order,
 	cfg section.ProcessorWebServer,
+	registrars ...RoutesRegistrar,
 ) processor.Processor {
 	gin.SetMode(gin.ReleaseMode)
 
@@ -57,8 +59,9 @@ func NewHTTP(
 	vGenericRegHealthCheck(router, hHealth)
 	vGenericRegPprof(router)
 
-	v1 := router.Group("/v1")
-	v1RegOrderHandler(v1, hOrder)
+	for _, reg := range registrars {
+		reg(router)
+	}
 
 	for _, routeInfo := range router.Routes() {
 		if routeInfo.Path == "" || routeInfo.Method == "" {

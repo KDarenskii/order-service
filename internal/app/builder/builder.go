@@ -18,10 +18,12 @@ import (
 	"github.com/KDarenskii/order-service/internal/app/config"
 	"github.com/KDarenskii/order-service/internal/app/constant"
 	"github.com/KDarenskii/order-service/internal/app/entity"
+	eorder "github.com/KDarenskii/order-service/internal/app/handler/event/order"
 	rhandler "github.com/KDarenskii/order-service/internal/app/handler/http"
 	rhealth "github.com/KDarenskii/order-service/internal/app/handler/http/health"
 	horder "github.com/KDarenskii/order-service/internal/app/handler/http/order"
 	"github.com/KDarenskii/order-service/internal/app/processor"
+	eprocessor "github.com/KDarenskii/order-service/internal/app/processor/event"
 	rprocessor "github.com/KDarenskii/order-service/internal/app/processor/http"
 	pmonitor "github.com/KDarenskii/order-service/internal/app/processor/monitor"
 	"github.com/KDarenskii/order-service/internal/app/repository"
@@ -47,15 +49,19 @@ type Builder struct {
 
 	catalogV1Client ccatalog.Client
 
-	kafkaClient     *broker.KafkaClient
-	busOrderCreated broker.Bus[entity.EventOrderCreated]
+	kafkaClient                *broker.KafkaClient
+	busOrderCreated            broker.Bus[entity.EventOrderCreated]
+	busOrderDeliveryCalculated broker.Bus[entity.EventOrderDeliveryCalculated]
 
 	orderRepo repository.Order
 
-	orderService service.Order
+	orderService    service.Order
+	deliveryService service.OrderDelivery
 
 	healthHandler rhandler.Health
 	orderHandler  rhandler.Order
+
+	httpRoutes []rprocessor.RoutesRegistrar
 
 	processors []processor.Processor
 
@@ -172,7 +178,7 @@ func (b *Builder) BuildClientGrpcCatalogV1() {
 }
 
 // ////////////////////////////////////////////////////////////////////////////////
-// ///// CLIENTS /////////////////////////////////////////////////////////////
+// ///// BROKER /////////////////////////////////////////////////////////////
 // ///////////////////////////////////////////////////////////////////////////////
 
 func (b *Builder) BuildBrokerKafka() {
@@ -194,19 +200,58 @@ func (b *Builder) BuildBrokerKafka() {
 
 			b.kafkaClient = client
 
-			bus, err := broker.NewBus(
-				client, codec.NewCodecJson[entity.EventOrderCreated](), cfg.ModelOrder.Created.Topic,
-				broker.Coalesce(cfg.ModelOrder.Created.ConsumerGroup, cfg.ConsumerGroup),
+			log.Info().Msg("Initialized kafka client")
+
+			processor.WatchForShutdown(b.ctx, &b.wg, processor.CloserFunc(client.Close))
+		},
+	)
+}
+
+func (b *Builder) BuildBusOrderCreated() {
+	b.exec(
+		func(b *Builder) {
+			cfg := config.Root.Broker.Kafka
+
+			bus, err := broker.NewBus[entity.EventOrderCreated](
+				b.kafkaClient, codec.NewCodecJson[entity.EventOrderCreated](),
+				cfg.ModelOrder.Created.Topic, cfg.ConsumerGroup,
 			)
 			if err != nil {
-				b.err = fmt.Errorf("kafka bus: %w", err)
+				b.err = fmt.Errorf("init BusOrderCreated: %w", err)
 				return
 			}
 
 			b.busOrderCreated = bus
+		}, b.kafkaClient,
+	)
+}
 
-			processor.WatchForShutdown(b.ctx, &b.wg, processor.CloserFunc(client.Close))
-		},
+func (b *Builder) BuildConsumerDeliveryCalculated() {
+	b.exec(
+		func(b *Builder) {
+			cfg := config.Root.Broker.Kafka
+
+			topic := cfg.ModelOrder.DeliveryCalculated.Topic
+			group := broker.Coalesce(cfg.ModelOrder.DeliveryCalculated.ConsumerGroup, cfg.ConsumerGroup)
+
+			bus, err := broker.NewBus[entity.EventOrderDeliveryCalculated](
+				b.kafkaClient, codec.NewCodecJson[entity.EventOrderDeliveryCalculated](), topic, group,
+			)
+			if err != nil {
+				b.err = fmt.Errorf("init ConsumerDeliveryCalculated: %w", err)
+				return
+			}
+
+			b.busOrderDeliveryCalculated = bus
+
+			handler := eorder.NewHandler(b.deliveryService)
+
+			b.processors = append(
+				b.processors, eprocessor.NewOrderDeliveryCalculatedEventsCatcher(handler, bus),
+			)
+
+			log.Info().Msg("Initialized ConsumerDeliveryCalculated")
+		}, b.kafkaClient, b.deliveryService,
 	)
 }
 
@@ -222,6 +267,14 @@ func (b *Builder) BuildServiceOrder() {
 	)
 }
 
+func (b *Builder) BuildServiceOrderDelivery() {
+	b.exec(
+		func(b *Builder) {
+			b.deliveryService = sorder.NewDeliveryService(b.orderRepo)
+		}, b.orderRepo,
+	)
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 ///// HANDLERS /////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
@@ -230,6 +283,7 @@ func (b *Builder) BuildHandlerOrder() {
 	b.exec(
 		func(b *Builder) {
 			b.orderHandler = horder.NewHandler(b.orderService)
+			b.httpRoutes = append(b.httpRoutes, rprocessor.V1OrderRoutes(b.orderHandler))
 		}, b.orderService,
 	)
 }
@@ -241,9 +295,11 @@ func (b *Builder) BuildHandlerOrder() {
 func (b *Builder) BuildProcHttp() {
 	b.exec(
 		func(b *Builder) {
-			proc := rprocessor.NewHTTP(b.otelServiceName, b.healthHandler, b.orderHandler, b.cfg.Processor.WebServer)
+			proc := rprocessor.NewHTTP(
+				b.otelServiceName, b.healthHandler, b.cfg.Processor.WebServer, b.httpRoutes...,
+			)
 			b.processors = append(b.processors, proc)
-		}, b.healthHandler, b.orderHandler,
+		}, b.healthHandler,
 	)
 }
 
