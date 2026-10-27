@@ -17,6 +17,7 @@ import (
 	cgrpc "github.com/KDarenskii/order-service/internal/app/client/catalog/grpc"
 	"github.com/KDarenskii/order-service/internal/app/config"
 	"github.com/KDarenskii/order-service/internal/app/constant"
+	"github.com/KDarenskii/order-service/internal/app/entity"
 	rhandler "github.com/KDarenskii/order-service/internal/app/handler/http"
 	rhealth "github.com/KDarenskii/order-service/internal/app/handler/http/health"
 	horder "github.com/KDarenskii/order-service/internal/app/handler/http/order"
@@ -28,6 +29,8 @@ import (
 	porder "github.com/KDarenskii/order-service/internal/app/repository/order"
 	"github.com/KDarenskii/order-service/internal/app/service"
 	sorder "github.com/KDarenskii/order-service/internal/app/service/order"
+	"github.com/KDarenskii/order-service/internal/pkg/broker"
+	"github.com/KDarenskii/order-service/internal/pkg/broker/codec"
 )
 
 type Builder struct {
@@ -43,6 +46,9 @@ type Builder struct {
 	catalogGrpcConn *grpc.ClientConn
 
 	catalogV1Client ccatalog.Client
+
+	kafkaClient     *broker.KafkaClient
+	busOrderCreated broker.Bus[entity.EventOrderCreated]
 
 	orderRepo repository.Order
 
@@ -165,6 +171,45 @@ func (b *Builder) BuildClientGrpcCatalogV1() {
 	)
 }
 
+// ////////////////////////////////////////////////////////////////////////////////
+// ///// CLIENTS /////////////////////////////////////////////////////////////
+// ///////////////////////////////////////////////////////////////////////////////
+
+func (b *Builder) BuildBrokerKafka() {
+	b.exec(
+		func(b *Builder) {
+			cfg := b.cfg.Broker.Kafka
+
+			client, err := broker.NewKafkaClient(
+				broker.KafkaConfig{
+					Addresses:     cfg.Addresses,
+					ConsumerGroup: cfg.ConsumerGroup,
+					ClientID:      cfg.ClientID,
+				},
+			)
+			if err != nil {
+				b.err = fmt.Errorf("kafka client: %w", err)
+				return
+			}
+
+			b.kafkaClient = client
+
+			bus, err := broker.NewBus(
+				client, codec.NewCodecJson[entity.EventOrderCreated](), cfg.ModelOrder.Created.Topic,
+				broker.Coalesce(cfg.ModelOrder.Created.ConsumerGroup, cfg.ConsumerGroup),
+			)
+			if err != nil {
+				b.err = fmt.Errorf("kafka bus: %w", err)
+				return
+			}
+
+			b.busOrderCreated = bus
+
+			processor.WatchForShutdown(b.ctx, &b.wg, processor.CloserFunc(client.Close))
+		},
+	)
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 ///// SERVICES /////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
@@ -172,8 +217,8 @@ func (b *Builder) BuildClientGrpcCatalogV1() {
 func (b *Builder) BuildServiceOrder() {
 	b.exec(
 		func(b *Builder) {
-			b.orderService = sorder.NewService(b.orderRepo, b.catalogV1Client)
-		}, b.orderRepo, b.catalogV1Client,
+			b.orderService = sorder.NewService(b.orderRepo, b.catalogV1Client, b.busOrderCreated)
+		}, b.orderRepo, b.catalogV1Client, b.busOrderCreated,
 	)
 }
 

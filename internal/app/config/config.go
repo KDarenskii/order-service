@@ -20,6 +20,7 @@ type Config struct {
 	Processor  section.Processor
 	Monitor    section.Monitor
 	Client     section.Client
+	Broker     section.Broker
 }
 
 var Root Config
