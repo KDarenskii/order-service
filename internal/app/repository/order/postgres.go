@@ -2,6 +2,7 @@ package porder
 
 import (
 	"context"
+	"time"
 
 	"github.com/gofrs/uuid"
 
@@ -31,10 +32,12 @@ func (r *repoPg) Update(ctx context.Context, order entity.Order) error {
 	res := r.conn.GetDB(ctx).WithContext(ctx).
 		Model(&entity.Order{}).
 		Where("guid = ?", order.GUID).
-		Updates(map[string]any{
-			"status":     order.Status,
-			"updated_at": order.UpdatedAt,
-		})
+		Updates(
+			map[string]any{
+				"status":     order.Status,
+				"updated_at": order.UpdatedAt,
+			},
+		)
 
 	return rcpostgres.NotFoundIfNoRows(res)
 }
@@ -83,4 +86,20 @@ func (r *repoPg) List(ctx context.Context, status *entity.OrderStatus, userGUID 
 	}
 
 	return orders, nil
+}
+
+func (r *repoPg) UpdateDelivery(ctx context.Context, orderGUID uuid.UUID, price int64, updatedAt time.Time) error {
+	res := r.conn.GetDB(ctx).WithContext(ctx).
+		Model(&entity.Order{}).
+		Where("guid = ?", orderGUID).
+		Where("status = ?", entity.OrderStatusPending).
+		Updates(
+			map[string]any{
+				"status":         entity.OrderStatusDeliveryCalculated,
+				"updated_at":     updatedAt,
+				"delivery_price": price,
+			},
+		)
+
+	return rcpostgres.NotFoundIfNoRows(res)
 }

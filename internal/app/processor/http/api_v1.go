@@ -6,6 +6,12 @@ import (
 	rhandler "github.com/KDarenskii/order-service/internal/app/handler/http"
 )
 
+func V1OrderRoutes(h rhandler.Order) RoutesRegistrar {
+	return func(r *gin.Engine) {
+		v1RegOrderHandler(r.Group("/v1"), h)
+	}
+}
+
 func v1RegOrderHandler(v1 *gin.RouterGroup, h rhandler.Order) {
 	v1.POST("/order/create", h.Create)
 	v1.GET("/order/:guid", h.GetByGUID)
